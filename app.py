@@ -11,7 +11,7 @@ st.header("🏆 台灣股市市值排行榜 (連動 Google Sheet)")
 def load_data():
     # 👇 請把下面的網址換成你自己的 CSV 連結
     # 這是範例連結 (若你還沒弄好，可以先用這個測試)
-    url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQNB2FmsuJKu4Uh9xh2Qt-9yWrtE_ILjNL-oSEyYLHyrJ2amMiAbGreOYpm6rrryWmCdU_zmsFx7kL0/pub?output=csv" 
+    url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQNB2FmsuJKu4Uh9xh2Qt-9yWrtE_ILjNL-oSEyYLHyrJ2amMiAbGreOYpm6rrryWmCdU_zmsFx7kL0/pub?gid=0&single=true&output=csv" 
     
     # 這裡放一個防呆機制，如果你還沒換連結，程式不會當掉
     if "docs.google.com" not in url:
