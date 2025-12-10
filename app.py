@@ -14,7 +14,7 @@ week_day_str = week_days[today.weekday()]
 st.title(f"📅 {date_str} (週{week_day_str})")
 st.header("🏆 台股市值排行榜 Top 150")
 
-# 新增的說明文字區塊 (使用 expander 收合或是直接顯示，這裡選擇直接顯示但用 info 框起來)
+# 說明區塊
 st.info("""
 **ℹ️ 0050 成分股調整規則說明：**
 * **公布時間**：每年 3、6、9、12 月的第一個星期五收盤後。
@@ -53,7 +53,7 @@ def load_data():
 df = load_data()
 
 if not df.empty:
-    # --- 4. 資料處理邏輯 ---
+    # --- 4. 資料前處理邏輯 ---
     
     # (A) 計算名次變動
     df['變動數'] = df['昨日排名'] - df['市值排名']
@@ -74,15 +74,66 @@ if not df.empty:
     else:
         df['是否在內'] = '?'
 
-    # --- 5. 排序與欄位順序調整 ---
+    # --- 5. 新增：預測區塊 (入選 vs 剔除) ---
+    st.markdown("---") # 分隔線
+    col_in, col_out = st.columns(2)
+
+    # 左邊：可能會入選 (排名 <= 50 且 不在內)
+    with col_in:
+        st.subheader("🔥 可能會入選")
+        # 篩選邏輯
+        potential_in = df[(df['市值排名'] <= 50) & (df['是否在內'] == 'X')].copy()
+        
+        if not potential_in.empty:
+            # 選取顯示欄位
+            display_in = potential_in[['市值排名', '股票名稱', '總市值']]
+            
+            # 設定樣式：前 40 名亮紅字
+            def style_potential_in(row):
+                # 如果排名 <= 40，整列紅字粗體
+                if row['市值排名'] <= 40:
+                    return ['color: red; font-weight: bold;'] * len(row)
+                return [''] * len(row)
+
+            styled_in = display_in.style.apply(style_potential_in, axis=1)\
+                .format({'市值排名': '{:.0f}', '總市值': '{:.0f}'})
+
+            st.dataframe(styled_in, hide_index=True, use_container_width=True)
+        else:
+            st.info("目前沒有符合條件的標的")
+
+    # 右邊：可能會剔除 (排名 > 50 且 在內)
+    with col_out:
+        st.subheader("⚠️ 可能會剔除")
+        # 篩選邏輯
+        potential_out = df[(df['市值排名'] > 50) & (df['是否在內'] == 'V')].copy()
+        
+        if not potential_out.empty:
+            display_out = potential_out[['市值排名', '股票名稱', '總市值']]
+            
+            # 這裡不特別標色，維持清爽，或者你可以依需求加
+            st.dataframe(
+                display_out, 
+                hide_index=True, 
+                use_container_width=True,
+                column_config={
+                    "市值排名": st.column_config.NumberColumn("排名", format="%d"),
+                    "總市值": st.column_config.NumberColumn("總市值", format="%d"),
+                }
+            )
+        else:
+            st.success("目前沒有成分股掉出 50 名外")
+
+    st.markdown("---") # 分隔線
+
+    # --- 6. 主表格呈現 ---
+    
+    # 排序與選取欄位
     df_sorted = df.sort_values(by='市值排名')
     top_150 = df_sorted.head(150)
-
     final_df = top_150[['股票代號', '股票名稱', '股價', '總市值', '市值排名', '名次變動', '是否在內']]
 
-    # --- 6. 設定顏色樣式 ---
-    
-    # 樣式 A: 排名紅綠燈
+    # 設定主表格樣式
     def highlight_rank_col(val):
         if pd.isna(val): return ''
         if val <= 40: return 'background-color: #d4edda; color: black;' # 綠
@@ -90,16 +141,12 @@ if not df.empty:
         elif 50 < val <= 60: return 'background-color: #f8d7da; color: black;' # 紅
         return ''
     
-    # 樣式 B: 納入欄位 V/X 變色
     def style_status_col(val):
-        if val == 'V': 
-            return 'color: red; font-weight: bold;'
-        elif val == 'X': 
-            return 'color: #006400; background-color: #ccffcc; font-weight: bold;'
+        if val == 'V': return 'color: red; font-weight: bold;'
+        elif val == 'X': return 'color: #006400; background-color: #ccffcc; font-weight: bold;'
         return ''
 
-    # 套用樣式
-    styled_df = final_df.style\
+    styled_main = final_df.style\
         .map(highlight_rank_col, subset=['市值排名'])\
         .map(style_status_col, subset=['是否在內'])\
         .format({
@@ -108,9 +155,8 @@ if not df.empty:
             '市值排名': '{:.0f}'
         })
 
-    # --- 7. 顯示表格 ---
     st.dataframe(
-        styled_df,
+        styled_main,
         height=1000, 
         hide_index=True, 
         use_container_width=True, 
