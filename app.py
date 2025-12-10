@@ -73,4 +73,28 @@ if not df.empty:
     top_150 = df_sorted.head(150)
 
     # --- 6. 整理表格欄位 ---
-    # 只
+    # 只留下要顯示的欄位，並調整順序
+    # 注意：這裡的欄位名稱要跟你 Excel 裡的名稱對應
+    final_df = top_150[['市值排名', '名次變動', '股票代號', '股票名稱', '股價', '總市值']]
+
+    # --- 7. 顯示美化後的表格 ---
+    st.dataframe(
+        final_df,
+        height=1000, # 表格高度拉長
+        hide_index=True, # 隱藏最左邊的 0,1,2 索引
+        use_container_width=True, # 填滿畫面寬度
+        column_config={
+            "市值排名": st.column_config.NumberColumn("排名", format="%d"),
+            "名次變動": st.column_config.TextColumn("變動"), # 文字欄位
+            "股票代號": st.column_config.TextColumn("代號"), # 改成文字以免出現逗號 (如 2,330)
+            "股價": st.column_config.NumberColumn("股價", format="$ %.2f"),
+            "總市值": st.column_config.NumberColumn("總市值 (億)", format="$ %.1f"),
+        }
+    )
+    
+    # 頁尾資訊
+    st.markdown(f"___")
+    st.text(f"最後更新時間: {datetime.now().strftime('%H:%M:%S')}")
+
+else:
+    st.warning("⚠️ 尚未讀取到資料，請確認你的 Google Sheet 連結是否正確且已發布為 CSV。")
