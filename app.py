@@ -84,11 +84,11 @@ if not df.empty:
         hide_index=True, # 隱藏最左邊的 0,1,2 索引
         use_container_width=True, # 填滿畫面寬度
         column_config={
-            "市值排名": st.column_config.NumberColumn("排名", format="%d"),
-            "名次變動": st.column_config.TextColumn("變動"), # 文字欄位
-            "股票代號": st.column_config.TextColumn("代號"), # 改成文字以免出現逗號 (如 2,330)
+            "股票代號": st.column_config.TextColumn("代號"), # 改成文字以免出現逗號 (如 2,330),
             "股價": st.column_config.NumberColumn("股價", format="$ %.2f"),
-            "總市值": st.column_config.NumberColumn("總市值 (億)", format="$ %.1f"),
+            "總市值": st.column_config.NumberColumn("總市值 (億)", format="$ %.1f")
+            "市值排名": st.column_config.NumberColumn("排名", format="%d")
+            "名次變動": st.column_config.TextColumn("變動"), # 文字欄位,
         }
     )
     
