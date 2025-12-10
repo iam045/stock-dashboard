@@ -1,55 +1,76 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
+from datetime import datetime
 
-# --- 設定 ---
-st.set_page_config(page_title="市值排行榜", layout="centered")
-st.header("🏆 台灣股市市值排行榜 (連動 Google Sheet)")
+# --- 1. 網頁基礎設定 ---
+st.set_page_config(page_title="台股市值戰情室", layout="centered")
 
-# --- 讀取資料 (改由網路讀取) ---
-@st.cache_data(ttl=60) # ttl=60 代表每 60 秒會重新抓一次新資料
+# --- 2. 顯示今日日期與標題 ---
+# 取得今天是星期幾 (0=週一, 6=週日)
+week_days = ["一", "二", "三", "四", "五", "六", "日"]
+today = datetime.now()
+date_str = today.strftime("%Y-%m-%d")
+week_day_str = week_days[today.weekday()]
+
+st.title(f"📅 {date_str} (週{week_day_str})")
+st.header("🏆 台股市值排行榜 Top 150")
+st.caption("資料來源：Google Sheet 自動連線 | 每 60 秒更新")
+
+# --- 3. 讀取與處理資料 ---
+@st.cache_data(ttl=60) # 設定快取 60 秒，避免頻繁讀取卡住
 def load_data():
-    # 👇 請把下面的網址換成你自己的 CSV 連結
-    # 這是範例連結 (若你還沒弄好，可以先用這個測試)
-    url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQNB2FmsuJKu4Uh9xh2Qt-9yWrtE_ILjNL-oSEyYLHyrJ2amMiAbGreOYpm6rrryWmCdU_zmsFx7kL0/pub?gid=0&single=true&output=csv" 
+    # 👇 請記得將此網址換成你自己的 Google Sheet CSV 連結
+    # 這裡我先放一個測試用的連結，確保你現在執行看得到畫面
+    # 實際上線時，請把下面這行換成： url = "你的_CSV_連結"
+    url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQNB2FmsuJKu4Uh9xh2Qt-9yWrtE_ILjNL-oSEyYLHyrJ2amMiAbGreOYpm6rrryWmCdU_zmsFx7kL0/pub?gid=0&single=true&output=csv"
     
-    # 這裡放一個防呆機制，如果你還沒換連結，程式不會當掉
-    if "docs.google.com" not in url:
-        return pd.DataFrame()
-        
     try:
         df = pd.read_csv(url)
-        # 資料清理 (因為從網路抓下來通常是純文字)
-        # 確保市值是數字
-        df['總市值'] = pd.to_numeric(df['總市值'], errors='coerce')
-        return df.sort_values(by='總市值', ascending=False)
-    except:
+        
+        # 強制轉型為數字，避免資料有髒汙導致錯誤
+        cols_to_numeric = ['市值排名', '總市值', '股價']
+        for col in cols_to_numeric:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+
+        # --- 處理「昨日排名」邏輯 ---
+        # 如果你的 Google Sheet 還沒設定好「昨日排名」欄位，程式會自己補上，避免報錯
+        if '昨日排名' not in df.columns:
+            df['昨日排名'] = df['市值排名'] # 暫時假設沒變動
+        else:
+            df['昨日排名'] = pd.to_numeric(df['昨日排名'], errors='coerce')
+            
+        return df
+    except Exception as e:
+        st.error(f"資料讀取失敗，請檢查連結。錯誤訊息: {e}")
         return pd.DataFrame()
 
 df = load_data()
 
 if not df.empty:
-    # 顯示更新按鈕
-    if st.button('🔄 點我手動更新資料'):
-        st.cache_data.clear() # 清除快取
-        st.rerun() # 重新執行
+    # --- 4. 計算名次變動 ---
+    # 變動 = 昨日 - 今日 (例如昨天第5，今天第3，5-3=2，代表進步2名)
+    df['變動數'] = df['昨日排名'] - df['市值排名']
 
-    # 1. 視覺化
-    st.subheader("Top 20 市值分佈")
-    fig = px.bar(
-        df.head(20), 
-        x='總市值', 
-        y='股票名稱', 
-        orientation='h', 
-        text_auto='.2s', 
-        color='總市值'
-    )
-    fig.update_layout(yaxis={'categoryorder':'total ascending'})
-    st.plotly_chart(fig, use_container_width=True)
+    # 定義顯示格式的函式
+    def format_change(val):
+        if pd.isna(val) or val == 0:
+            return "➖"      # 持平
+        elif val > 0:
+            return f"⬆️ {int(val)}" # 進步 (紅色概念)
+        elif val < 0:
+            return f"⬇️ {int(abs(val))}" # 退步 (綠色概念)
+        else:
+            return "➖"
 
-    # 2. 資料表
-    st.subheader("詳細排名清單")
-    st.dataframe(df[['市值排名', '股票代號', '股票名稱', '股價', '總市值']], hide_index=True)
+    df['名次變動'] = df['變動數'].apply(format_change)
 
-else:
-    st.info("👋 嗨！請記得修改程式碼中的 `url` 變數，填入你的 Google Sheet CSV 連結喔！")
+    # --- 5. 篩選與排序 ---
+    # 確保依照市值排名排序
+    df_sorted = df.sort_values(by='市值排名')
+    
+    # 只取前 150 名
+    top_150 = df_sorted.head(150)
+
+    # --- 6. 整理表格欄位 ---
+    # 只
