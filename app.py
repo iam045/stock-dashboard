@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime
 
 # --- 1. 網頁基礎設定 ---
-st.set_page_config(page_title="台股市值戰情室", layout="centered")
+st.set_page_config(page_title="0050戰情室", layout="centered")
 
 # --- 2. 標題區 ---
 week_days = ["一", "二", "三", "四", "五", "六", "日"]
@@ -12,8 +12,8 @@ date_str = today.strftime("%Y-%m-%d")
 week_day_str = week_days[today.weekday()]
 
 st.title(f"📅 {date_str} (週{week_day_str})")
-st.header("🏆 台股市值排行榜 Top 150")
-st.caption("資料來源：Google Sheet 自動連線 | 🔴紅色:50-60名 | 🟡黃色:40-50名 | 🟢綠色:前40名")
+st.header("🏆 台股市值排行")
+st.caption("資料來源：Google Sheet 自動連線 |🟢綠色:前40名|🟡黃色:40-50名|🔴紅色:50-60名 ")
 
 # --- 3. 讀取資料 ---
 @st.cache_data(ttl=60) 
