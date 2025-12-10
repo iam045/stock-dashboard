@@ -24,13 +24,11 @@ def load_data():
     try:
         df = pd.read_csv(url)
         
-        # 轉型為數字
         cols_to_numeric = ['市值排名', '總市值', '股價']
         for col in cols_to_numeric:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce')
 
-        # 處理「昨日排名」
         if '昨日排名' not in df.columns:
             df['昨日排名'] = df['市值排名'] 
         else:
@@ -57,8 +55,7 @@ if not df.empty:
 
     # (B) 判斷「是否在內」
     def check_status(val):
-        if '✅' in str(val):
-            return 'V'
+        if '✅' in str(val): return 'V'
         return 'X'
     
     if '第 1 欄' in df.columns:
@@ -66,54 +63,77 @@ if not df.empty:
     else:
         df['是否在內'] = '?'
 
-    # --- 5. 排序與欄位順序調整 (納入移到最後) ---
+    # --- 5. 排序與重新命名欄位 ---
     df_sorted = df.sort_values(by='市值排名')
     top_150 = df_sorted.head(150)
 
-    # 這裡把 '是否在內' 移到 list 的最後面
+    # 選取欄位並改名
     final_df = top_150[['股票代號', '股票名稱', '股價', '總市值', '市值排名', '名次變動', '是否在內']]
+    final_df.columns = ['代號', '股票名稱', '股價', '總市值 (億)', '排名', '變動', '納入']
 
-    # --- 6. 設定樣式 (Styles) ---
+    # --- 6. 設定樣式 (Pandas Styler) ---
     
+    # 設定格式
+    styled = final_df.style.format({
+        '股價': '${:.2f}',
+        '總市值 (億)': '${:.0f}',
+    })
+
     # 樣式 A: 排名紅綠燈 (背景色)
     def highlight_rank_col(val):
-        color = ''
         if pd.isna(val): return ''
-        if val <= 40: color = '#d4edda'      # 綠
-        elif 40 < val <= 50: color = '#fff3cd' # 黃
-        elif 50 < val <= 60: color = '#f8d7da' # 紅
-        return f'background-color: {color}; color: black;' if color else ''
-
-    # 樣式 B: 納入欄位 V紅X綠 (文字顏色+粗體)
+        if val <= 40: return 'background-color: #d4edda; color: black;' # 淺綠
+        elif 40 < val <= 50: return 'background-color: #fff3cd; color: black;' # 淺黃
+        elif 50 < val <= 60: return 'background-color: #f8d7da; color: black;' # 淺紅
+        return ''
+    
+    # 樣式 B: 納入欄位 V/X 變色 (這裡修改了 X 的樣式)
     def style_status_col(val):
-        if val == 'V':
+        if val == 'V': 
             return 'color: red; font-weight: bold;'
-        elif val == 'X':
-            return 'color: green; font-weight: bold;'
+        elif val == 'X': 
+            # 綠色文字 + 亮綠色背景 + 粗體
+            return 'color: #006400; background-color: #ccffcc; font-weight: bold;'
         return ''
 
-    # 套用所有樣式
-    styled_df = final_df.style\
-        .map(highlight_rank_col, subset=['市值排名'])\
-        .map(style_status_col, subset=['是否在內'])\
-        .set_properties(**{'text-align': 'center'}) # 全體置中
+    # 套用樣式
+    styled = styled.map(highlight_rank_col, subset=['排名'])\
+                   .map(style_status_col, subset=['納入'])
 
-    # --- 7. 顯示表格 ---
-    st.dataframe(
-        styled_df,
-        height=1000, 
-        hide_index=True, 
-        use_container_width=True, 
-        column_config={
-            "股票代號": st.column_config.TextColumn("代號"), 
-            "股票名稱": st.column_config.TextColumn("股票名稱"),
-            "股價": st.column_config.NumberColumn("股價", format="$ %.2f"),
-            "總市值": st.column_config.NumberColumn("總市值 (億)", format="$ %d"), 
-            "市值排名": st.column_config.NumberColumn("排名", format="%d"),
-            "名次變動": st.column_config.TextColumn("變動"), 
-            "是否在內": st.column_config.TextColumn("納入", width="small"),
+    # --- 7. 轉換為 HTML 並注入 CSS ---
+    
+    html_table = styled.to_html(escape=False)
+    
+    custom_css = """
+    <style>
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-family: Arial, sans-serif;
         }
-    )
+        th, td {
+            text-align: center !important; /* 強制置中 */
+            padding: 12px 8px;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #f2f2f2;
+            color: #333;
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }
+        tr:hover {background-color: #f5f5f5;}
+    </style>
+    """
+
+    # --- 8. 顯示 HTML 表格 ---
+    st.markdown(f"""
+        {custom_css}
+        <div style="height: 800px; overflow-y: auto; border: 1px solid #ccc; border-radius: 5px;">
+            {html_table}
+        </div>
+        """, unsafe_allow_html=True)
     
     st.markdown("___")
     st.text(f"最後更新時間: {datetime.now().strftime('%H:%M:%S')}")
