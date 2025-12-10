@@ -109,7 +109,7 @@ if not df.empty:
             
             # 樣式：60 名以外亮綠字 (新增功能)
             def style_potential_out(row):
-                if row['市值排名'] > 60:
+                if row['市值排名'] >= 60:
                     return ['color: #006400; font-weight: bold;'] * len(row) # 深綠色粗體
                 return [''] * len(row)
 
