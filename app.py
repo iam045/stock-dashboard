@@ -3,17 +3,28 @@ import pandas as pd
 from datetime import datetime
 
 # --- 1. 網頁基礎設定 ---
-st.set_page_config(page_title="0050戰情室", layout="centered")
+st.set_page_config(page_title="台股市值戰情室", layout="centered")
 
-# --- 2. 標題區 ---
+# --- 2. 標題與說明文字區 ---
 week_days = ["一", "二", "三", "四", "五", "六", "日"]
 today = datetime.now()
 date_str = today.strftime("%Y-%m-%d")
 week_day_str = week_days[today.weekday()]
 
 st.title(f"📅 {date_str} (週{week_day_str})")
-st.header("🏆 台股市值排行")
-st.caption("資料來源：Google Sheet 自動連線 |🟢綠色:前40名|🟡黃色:40-50名|🔴紅色:50-60名 ")
+st.header("🏆 台股市值排行榜 Top 150")
+
+# 新增的說明文字區塊 (使用 expander 收合或是直接顯示，這裡選擇直接顯示但用 info 框起來)
+st.info("""
+**ℹ️ 0050 成分股調整規則說明：**
+* **公布時間**：每年 3、6、9、12 月的第一個星期五收盤後。
+* **生效時間**：公布當月後的第三個星期五收盤後。
+* **納入規則**：若非成分股之市值排名**上升至前 40 名**，則納入。
+* **刪除規則**：若成分股之市值排名**下降至 61 名以下**，則剔除。
+* *審核日推估：生效日往前 4 週的星期一 (待確認)*
+""")
+
+st.caption("資料來源：Google Sheet 自動連線 | 🔴紅色:50-60名 | 🟡黃色:40-50名 | 🟢綠色:前40名")
 
 # --- 3. 讀取資料 ---
 @st.cache_data(ttl=60) 
@@ -53,7 +64,7 @@ if not df.empty:
         return "➖"
     df['名次變動'] = df['變動數'].apply(format_change)
 
-    # (B) 判斷「是否在內」 (V/X)
+    # (B) 判斷「是否在內」
     def check_status(val):
         if '✅' in str(val): return 'V'
         return 'X'
@@ -67,40 +78,37 @@ if not df.empty:
     df_sorted = df.sort_values(by='市值排名')
     top_150 = df_sorted.head(150)
 
-    # 將「是否在內」移到最後面
     final_df = top_150[['股票代號', '股票名稱', '股價', '總市值', '市值排名', '名次變動', '是否在內']]
 
-    # --- 6. 設定顏色樣式 (Pandas Styler) ---
+    # --- 6. 設定顏色樣式 ---
     
-    # 樣式 A: 排名紅綠燈 (背景色)
+    # 樣式 A: 排名紅綠燈
     def highlight_rank_col(val):
         if pd.isna(val): return ''
-        if val <= 40: return 'background-color: #d4edda; color: black;' # 淺綠
-        elif 40 < val <= 50: return 'background-color: #fff3cd; color: black;' # 淺黃
-        elif 50 < val <= 60: return 'background-color: #f8d7da; color: black;' # 淺紅
+        if val <= 40: return 'background-color: #d4edda; color: black;' # 綠
+        elif 40 < val <= 50: return 'background-color: #fff3cd; color: black;' # 黃
+        elif 50 < val <= 60: return 'background-color: #f8d7da; color: black;' # 紅
         return ''
     
     # 樣式 B: 納入欄位 V/X 變色
     def style_status_col(val):
         if val == 'V': 
-            # 紅色 + 粗體
             return 'color: red; font-weight: bold;'
         elif val == 'X': 
-            # 綠色字 + 亮綠背景(#ccffcc) + 粗體 (你要的顯眼效果)
             return 'color: #006400; background-color: #ccffcc; font-weight: bold;'
         return ''
 
-    # 套用樣式 (只針對特定欄位)
+    # 套用樣式
     styled_df = final_df.style\
         .map(highlight_rank_col, subset=['市值排名'])\
         .map(style_status_col, subset=['是否在內'])\
         .format({
-            '股價': '{:.2f}',       # 小數點兩位
-            '總市值': '{:.0f}',     # 整數
-            '市值排名': '{:.0f}'    # 整數
+            '股價': '{:.2f}',
+            '總市值': '{:.0f}',
+            '市值排名': '{:.0f}'
         })
 
-    # --- 7. 顯示表格 (使用標準 st.dataframe) ---
+    # --- 7. 顯示表格 ---
     st.dataframe(
         styled_df,
         height=1000, 
