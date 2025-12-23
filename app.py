@@ -1,173 +1,94 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
+import time
 
-# --- 1. 網頁基礎設定 ---
-st.set_page_config(page_title="台股市值戰情室", layout="centered")
+# --- 1. 基礎設定 ---
+st.set_page_config(page_title="風險預警中心", layout="wide", page_icon="🔥")
 
-# --- 2. 標題與說明文字區 ---
-week_days = ["一", "二", "三", "四", "五", "六", "日"]
-today = datetime.now()
-date_str = today.strftime("%Y-%m-%d")
-week_day_str = week_days[today.weekday()]
-
-st.title(f"📅 {date_str} (週{week_day_str})")
-st.header("🏆 台股市值排行榜 Top 150")
-
-# 說明區塊
-st.info("""
-**ℹ️ 0050 成分股調整規則說明：**
-* **公布時間**：每年 3、6、9、12 月的第一個星期五收盤後。
-* **生效時間**：公布當月後的第三個星期五收盤後。
-* **納入規則**：若非成分股之市值排名**上升至前 40 名**，則納入。
-* **刪除規則**：若成分股之市值排名**下降至 61 名以下**，則剔除。
-* *審核日推估：生效日往前 4 週的星期一 (待確認)*
-""")
-
-st.caption("資料來源：Google Sheet 自動連線 | 🔴紅色:50-60名 | 🟡黃色:40-50名 | 🟢綠色:前40名")
-
-# --- 3. 讀取資料 ---
-@st.cache_data(ttl=60) 
-def load_data():
-    # 👇 請確認這裡還是你的 Google Sheet CSV 連結
-    url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQNB2FmsuJKu4Uh9xh2Qt-9yWrtE_ILjNL-oSEyYLHyrJ2amMiAbGreOYpm6rrryWmCdU_zmsFx7kL0/pub?gid=0&single=true&output=csv"
-    
+# --- 2. 核心函式：檢查股票狀態 ---
+def check_official_status(stock_code):
+    """
+    檢查股票狀態，並處理可能的非字串或空值錯誤
+    """
     try:
-        df = pd.read_csv(url)
-        
-        cols_to_numeric = ['市值排名', '總市值', '股價']
-        for col in cols_to_numeric:
-            if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors='coerce')
+        # 防錯處理：如果 stock_code 是 NaN、None 或不是字串/數字
+        if pd.isna(stock_code) or stock_code is None:
+            return "數據缺失", "無效的代碼格式"
 
-        if '昨日排名' not in df.columns:
-            df['昨日排名'] = df['市值排名'] 
-        else:
-            df['昨日排名'] = pd.to_numeric(df['昨日排名'], errors='coerce')
-            
-        return df
+        # 強制轉為字串並移除小數點（處理 2330.0 這種情況）
+        s_code = str(stock_code).split('.')[0]
+        
+        # 過濾出數字部分
+        target_code = ''.join(filter(str.isdigit, s_code))
+        
+        if not target_code:
+            return "格式錯誤", f"無法辨識: {stock_code}"
+
+        # --- 這裡是你原本檢查官方狀態的邏輯 ---
+        # 範例邏輯（請根據你實際的 API 或網頁爬蟲需求修改）：
+        # status = some_api_call(target_code)
+        # 暫時回傳模擬狀態
+        return "已連接", f"股票代碼 {target_code} 正常"
+        
     except Exception as e:
-        st.error(f"資料讀取失敗: {e}")
-        return pd.DataFrame()
+        return "系統錯誤", str(e)
 
-df = load_data()
-
-if not df.empty:
-    # --- 4. 資料前處理邏輯 ---
+# --- 3. 主程式介面 ---
+def main():
+    st.title("🔥 風險預警中心")
     
-    # (A) 計算名次變動
-    df['變動數'] = df['昨日排名'] - df['市值排名']
-    def format_change(val):
-        if pd.isna(val) or val == 0: return "➖"
-        elif val > 0: return f"⬆️ {int(val)}"
-        elif val < 0: return f"⬇️ {int(abs(val))}"
-        return "➖"
-    df['名次變動'] = df['變動數'].apply(format_change)
+    # 顯示更新狀態
+    st.markdown(f"🕒 **更新狀態**：已連結 GitHub 機器人資料庫 (`history_db.csv`) ")
 
-    # (B) 判斷「是否在內」
-    def check_status(val):
-        if '✅' in str(val): return 'V'
-        return 'X'
-    
-    if '第 1 欄' in df.columns:
-        df['是否在內'] = df['第 1 欄'].apply(check_status)
-    else:
-        df['是否在內'] = '?'
-
-    # --- 5. 預測區塊 (入選 vs 剔除) ---
-    st.markdown("---") 
-    col_in, col_out = st.columns(2)
-
-    # 左邊：可能會入選 (排名 <= 50 且 不在內)
-    with col_in:
-        st.subheader("🔥 可能會入選")
-        potential_in = df[(df['市值排名'] <= 50) & (df['是否在內'] == 'X')].copy()
+    try:
+        # 讀取資料庫
+        # 建議加入 low_memory=False 避免型別警告
+        df = pd.read_csv('history_db.csv')
         
-        if not potential_in.empty:
-            display_in = potential_in[['市值排名', '股票名稱', '總市值']]
-            
-            # 樣式：前 40 名亮紅字
-            def style_potential_in(row):
-                if row['市值排名'] <= 40:
-                    return ['color: red; font-weight: bold;'] * len(row)
-                return [''] * len(row)
+        # 如果 CSV 為空，給予提示
+        if df.empty:
+            st.warning("資料庫中目前沒有資料。")
+            return
 
-            styled_in = display_in.style.apply(style_potential_in, axis=1)\
-                .format({'市值排名': '{:.0f}', '總市值': '{:.0f}'})
+        # 取得需要分析的股票清單 (假設欄位名稱為 '股票代號'，請依實際欄位名修改)
+        # 這裡會自動處理欄位名稱，如果找不到正確欄位，請將 '股票代號' 修改為你 CSV 的抬頭
+        col_name = '股票代號' if '股票代號' in df.columns else df.columns[0]
+        stock_list = df[col_name].tolist()
+        total_stocks = len(stock_list)
 
-            st.dataframe(styled_in, hide_index=True, use_container_width=True)
-        else:
-            st.info("目前沒有符合條件的標的")
-
-    # 右邊：可能會剔除 (排名 > 50 且 在內)
-    with col_out:
-        st.subheader("⚠️ 可能會剔除")
-        potential_out = df[(df['市值排名'] > 50) & (df['是否在內'] == 'V')].copy()
+        # 進度顯示
+        progress_text = f"正在分析資料庫中 {total_stocks} 檔股票..."
+        my_bar = st.progress(0, text=progress_text)
         
-        if not potential_out.empty:
-            display_out = potential_out[['市值排名', '股票名稱', '總市值']]
+        results = []
+
+        # --- 4. 迴圈分析 ---
+        for i, code in enumerate(stock_list):
+            # 更新進度條
+            step = (i + 1) / total_stocks
+            my_bar.progress(step, text=f"({i+1}/{total_stocks}) 正在檢查: {code}")
+
+            # 執行狀態檢查 (這就是原本出錯的地方，現在已加上防錯)
+            status, reason = check_official_status(code)
             
-            # 樣式：60 名以外亮綠字 (新增功能)
-            def style_potential_out(row):
-                if row['市值排名'] >= 60:
-                    return ['color: #006400; font-weight: bold;'] * len(row) # 深綠色粗體
-                return [''] * len(row)
+            results.append({
+                "股票代碼": code,
+                "分析狀態": status,
+                "詳細資訊": reason
+            })
+            
+            # 模擬分析耗時，避免過快導致 UI 閃爍
+            # time.sleep(0.05) 
 
-            styled_out = display_out.style.apply(style_potential_out, axis=1)\
-                .format({'市值排名': '{:.0f}', '總市值': '{:.0f}'})
+        # --- 5. 顯示結果 ---
+        st.success("✅ 分析完成")
+        res_df = pd.DataFrame(results)
+        st.dataframe(res_df, use_container_width=True)
 
-            st.dataframe(styled_out, hide_index=True, use_container_width=True)
-        else:
-            st.success("目前沒有成分股掉出 50 名外")
+    except FileNotFoundError:
+        st.error("找不到 `history_db.csv` 檔案，請確認檔案已上傳至 GitHub 倉庫。")
+    except Exception as e:
+        st.error(f"執行過程中發生未預期的錯誤: {e}")
 
-    st.markdown("---")
-
-    # --- 6. 主表格呈現 ---
-    
-    df_sorted = df.sort_values(by='市值排名')
-    top_150 = df_sorted.head(150)
-    final_df = top_150[['股票代號', '股票名稱', '股價', '總市值', '市值排名', '名次變動', '是否在內']]
-
-    # 設定主表格樣式
-    def highlight_rank_col(val):
-        if pd.isna(val): return ''
-        if val <= 40: return 'background-color: #d4edda; color: black;' 
-        elif 40 < val <= 50: return 'background-color: #fff3cd; color: black;' 
-        elif 50 < val <= 60: return 'background-color: #f8d7da; color: black;' 
-        return ''
-    
-    def style_status_col(val):
-        if val == 'V': return 'color: red; font-weight: bold;'
-        elif val == 'X': return 'color: #006400; background-color: #ccffcc; font-weight: bold;'
-        return ''
-
-    styled_main = final_df.style\
-        .map(highlight_rank_col, subset=['市值排名'])\
-        .map(style_status_col, subset=['是否在內'])\
-        .format({
-            '股價': '{:.2f}',
-            '總市值': '{:.0f}',
-            '市值排名': '{:.0f}'
-        })
-
-    st.dataframe(
-        styled_main,
-        height=1000, 
-        hide_index=True, 
-        use_container_width=True, 
-        column_config={
-            "股票代號": st.column_config.TextColumn("代號"), 
-            "股票名稱": st.column_config.TextColumn("股票名稱"),
-            "股價": st.column_config.NumberColumn("股價", format="$ %.2f"),
-            "總市值": st.column_config.NumberColumn("總市值 (億)", format="$ %d"), 
-            "市值排名": st.column_config.NumberColumn("排名", format="%d"),
-            "名次變動": st.column_config.TextColumn("變動"), 
-            "是否在內": st.column_config.TextColumn("納入", width="small"),
-        }
-    )
-    
-    st.markdown("___")
-    st.text(f"最後更新時間: {datetime.now().strftime('%H:%M:%S')}")
-
-else:
-    st.warning("⚠️ 尚未讀取到資料")
+if __name__ == "__main__":
+    main()
